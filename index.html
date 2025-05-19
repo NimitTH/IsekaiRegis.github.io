@@ -22,10 +22,21 @@
 
     async function main() {
       await liff.init({ liffId: LIFF_ID });
-      if (!liff.isLoggedIn()) liff.login();
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
 
       const profile = await liff.getProfile();
       const userId = profile.userId;
+
+      const checkRes = await fetch(`${SCRIPT_URL}?action=check&userId=${userId}`);
+      const checkData = await checkRes.json();
+
+      if (checkData.registered) {
+        document.getElementById('message').innerText = '✅ คุณเคยลงทะเบียนแล้ว';
+        return;
+      }
 
       document.getElementById('registerForm').addEventListener('submit', async (e) => {
         e.preventDefault();
