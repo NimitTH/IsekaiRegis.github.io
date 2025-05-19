@@ -53,6 +53,11 @@
       background-color: #3367d6;
     }
     
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
     #message {
       text-align: center;
       margin-top: 20px;
@@ -81,73 +86,188 @@
       margin-top: 20px;
       display: none;
     }
+    
+    .debug-panel {
+      margin-top: 30px;
+      padding: 10px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      display: none;
+    }
+    
+    #testApiBtn {
+      background-color: #28a745;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
   <h2>ลงทะเบียนนักเรียน</h2>
+  
   <form id="registerForm">
     <input type="text" id="fullName" placeholder="ชื่อ-นามสกุล" required /><br>
     <input type="email" id="email" placeholder="Email" required /><br>
     <input type="password" id="password" placeholder="Password" required /><br>
     <button type="submit" id="submitBtn">ลงทะเบียน</button>
+    <button type="button" id="testApiBtn">ทดสอบการเชื่อมต่อ API</button>
   </form>
+  
   <div id="loading" class="loading">กำลังประมวลผล...</div>
   <p id="message"></p>
+  
+  <div id="debugPanel" class="debug-panel">
+    <h3>Debug Information</h3>
+    <div id="debugInfo"></div>
+  </div>
   
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
     // URL ของ Google Apps Script Web App
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK0NwN-igqCQjpEExeVZ2VM3AZGciIlv7ijfwIXPKBb-HkX_ZgVTP_bmIIb2_4wQBNqQ/exec';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxjM_TjUfSsQ9VWIB6c0-LEJPjMCp2upcBM5CfZjj3NYKDWxNNelytXnTMAljlbLu2Thg/exec';
     // LIFF ID จาก LINE Developer Console
     const LIFF_ID = '2007433492-y8YG0Qqq';
+    
+    // สำหรับการ Debug
+    let isDebugMode = false;
+    let userIdValue = '';
+    
+    // แสดงข้อความ Debug
+    function addDebugInfo(message) {
+      if (isDebugMode) {
+        const debugInfo = document.getElementById('debugInfo');
+        const timestamp = new Date().toLocaleTimeString();
+        debugInfo.innerHTML += `<p>[${timestamp}] ${message}</p>`;
+        console.log(`[${timestamp}] ${message}`);
+      }
+    }
+    
+    // เปิด/ปิดโหมด Debug
+    function toggleDebugMode() {
+      isDebugMode = !isDebugMode;
+      document.getElementById('debugPanel').style.display = isDebugMode ? 'block' : 'none';
+      addDebugInfo('Debug mode ' + (isDebugMode ? 'enabled' : 'disabled'));
+    }
+    
+    // เพิ่ม event listener สำหรับการกด Ctrl+Shift+D เพื่อเปิด/ปิดโหมด Debug
+    document.addEventListener('keydown', function(event) {
+      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+        toggleDebugMode();
+      }
+    });
     
     // แสดงข้อความ
     function showMessage(message, type) {
       const messageElement = document.getElementById('message');
       messageElement.innerText = message;
       messageElement.className = type;
+      addDebugInfo(`Message: ${message} (${type})`);
     }
     
     // แสดง/ซ่อนการโหลด
     function toggleLoading(show) {
       document.getElementById('loading').style.display = show ? 'block' : 'none';
       document.getElementById('submitBtn').disabled = show;
+      document.getElementById('testApiBtn').disabled = show;
+      addDebugInfo(`Loading state: ${show ? 'shown' : 'hidden'}`);
+    }
+    
+    // ทดสอบการเชื่อมต่อ API
+    async function testApiConnection() {
+      try {
+        toggleLoading(true);
+        addDebugInfo('Testing API connection...');
+        
+        const response = await fetch(SCRIPT_URL);
+        addDebugInfo(`API response status: ${response.status}`);
+        
+        const responseText = await response.text();
+        addDebugInfo(`API raw response: ${responseText}`);
+        
+        let data;
+        try {
+          data = JSON.parse(responseText);
+          addDebugInfo(`API parsed response: ${JSON.stringify(data)}`);
+          
+          if (data.status === 'ok') {
+            showMessage(`✅ การเชื่อมต่อ API สำเร็จ: ${data.message}`, 'success');
+          } else {
+            showMessage(`⚠️ การเชื่อมต่อ API ไม่สมบูรณ์: ${data.message || 'Unknown error'}`, 'warning');
+          }
+        } catch (jsonError) {
+          addDebugInfo(`JSON parse error: ${jsonError}`);
+          showMessage('❌ การเชื่อมต่อ API ล้มเหลว: รูปแบบข้อมูลไม่ถูกต้อง', 'error');
+        }
+      } catch (error) {
+        addDebugInfo(`API connection error: ${error}`);
+        showMessage(`❌ การเชื่อมต่อ API ล้มเหลว: ${error.message}`, 'error');
+      } finally {
+        toggleLoading(false);
+      }
     }
     
     // ฟังก์ชันหลัก
     async function main() {
       try {
+        addDebugInfo('Starting application...');
+        addDebugInfo(`LIFF ID: ${LIFF_ID}`);
+        addDebugInfo(`API URL: ${SCRIPT_URL}`);
+        
         // เริ่มต้น LIFF
+        addDebugInfo('Initializing LIFF...');
         await liff.init({ liffId: LIFF_ID });
+        addDebugInfo('LIFF initialized successfully');
         
         // ตรวจสอบการล็อกอิน
-        if (!liff.isLoggedIn()) {
+        const isLoggedIn = liff.isLoggedIn();
+        addDebugInfo(`LIFF login status: ${isLoggedIn ? 'logged in' : 'not logged in'}`);
+        
+        if (!isLoggedIn) {
+          addDebugInfo('Redirecting to LINE login...');
           liff.login();
           return;
         }
         
         // ดึงข้อมูลโปรไฟล์
+        addDebugInfo('Getting user profile...');
         const profile = await liff.getProfile();
-        const userId = profile.userId;
+        userIdValue = profile.userId;
+        addDebugInfo(`User profile retrieved - ID: ${userIdValue}, Name: ${profile.displayName}`);
         
         // ตรวจสอบการลงทะเบียน
         try {
           toggleLoading(true);
-          const checkRes = await fetch(`${SCRIPT_URL}?action=check&userId=${userId}`);
-          const checkData = await checkRes.json();
+          addDebugInfo(`Checking registration status for user ID: ${userIdValue}`);
+          
+          const checkUrl = `${SCRIPT_URL}?action=check&userId=${userIdValue}`;
+          addDebugInfo(`Check URL: ${checkUrl}`);
+          
+          const checkRes = await fetch(checkUrl);
+          addDebugInfo(`Check response status: ${checkRes.status}`);
+          
+          const checkText = await checkRes.text();
+          addDebugInfo(`Check raw response: ${checkText}`);
+          
+          const checkData = JSON.parse(checkText);
+          addDebugInfo(`Check parsed response: ${JSON.stringify(checkData)}`);
           
           if (checkData.registered) {
             showMessage('✅ คุณเคยลงทะเบียนแล้ว', 'warning');
             toggleLoading(false);
             return;
           }
+          
+          showMessage('กรุณากรอกข้อมูลเพื่อลงทะเบียน', 'warning');
           toggleLoading(false);
         } catch (error) {
-          console.error('Error checking registration:', error);
-          showMessage('❌ ไม่สามารถตรวจสอบข้อมูลได้ กรุณาลองใหม่อีกครั้ง', 'error');
+          addDebugInfo(`Error checking registration: ${error}`);
+          showMessage(`❌ ไม่สามารถตรวจสอบข้อมูลได้: ${error.message}`, 'error');
           toggleLoading(false);
-          return;
         }
+        
+        // เพิ่ม event listener สำหรับปุ่มทดสอบ API
+        document.getElementById('testApiBtn').addEventListener('click', testApiConnection);
         
         // จัดการการส่งฟอร์ม
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
@@ -166,40 +286,73 @@
               return;
             }
             
+            // Debug: แสดงข้อมูลที่จะส่ง
+            const requestData = { userId: userIdValue, fullName, email, password };
+            addDebugInfo(`Sending data: ${JSON.stringify(requestData)}`);
+            addDebugInfo(`To URL: ${SCRIPT_URL}`);
+            
             // ส่งข้อมูลไปยัง Google Apps Script
             const res = await fetch(SCRIPT_URL, {
               method: 'POST',
-              body: JSON.stringify({ userId, fullName, email, password }),
+              body: JSON.stringify(requestData),
               headers: { 'Content-Type': 'application/json' }
             });
             
             // ตรวจสอบการตอบกลับ
+            addDebugInfo(`Response status: ${res.status}`);
+            
             if (!res.ok) {
-              throw new Error(`HTTP error! status: ${res.status}`);
+              const errorText = await res.text();
+              addDebugInfo(`Error response: ${errorText}`);
+              throw new Error(`HTTP error! status: ${res.status}, response: ${errorText}`);
             }
             
-            const result = await res.json();
-            console.log('Registration result:', result); // Debug log
+            const responseText = await res.text();
+            addDebugInfo(`Raw response: ${responseText}`);
+            
+            // พยายามแปลงเป็น JSON
+            let result;
+            try {
+              result = JSON.parse(responseText);
+              addDebugInfo(`Registration result (parsed): ${JSON.stringify(result)}`);
+            } catch (jsonError) {
+              addDebugInfo(`JSON parse error: ${jsonError}`);
+              throw new Error('การตอบกลับจากเซิร์ฟเวอร์ไม่ใช่รูปแบบ JSON ที่ถูกต้อง');
+            }
             
             if (result.status === 'duplicate') {
               showMessage('⚠️ คุณเคยลงทะเบียนแล้ว', 'warning');
             } else if (result.status === 'success') {
               showMessage(`✅ ลงทะเบียนสำเร็จ! รหัสนักเรียนของคุณคือ ${result.studId}`, 'success');
-              setTimeout(() => liff.closeWindow(), 3000);
+              addDebugInfo(`Registration successful. Student ID: ${result.studId}`);
+              setTimeout(() => {
+                addDebugInfo('Closing LIFF window...');
+                liff.closeWindow();
+              }, 3000);
+            } else if (result.status === 'error') {
+              showMessage(`❌ เกิดข้อผิดพลาด: ${result.message || 'ไม่ทราบสาเหตุ'}`, 'error');
             } else {
-              showMessage('❌ เกิดข้อผิดพลาดในการลงทะเบียน', 'error');
+              showMessage('❌ เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ', 'error');
             }
           } catch (error) {
-            console.error('Registration error:', error);
-            showMessage('❌ เกิดข้อผิดพลาดในการส่งข้อมูล กรุณาลองใหม่อีกครั้ง', 'error');
+            addDebugInfo(`Registration error: ${error}`);
+            const errorMsg = error.message || 'ไม่ทราบสาเหตุ';
+            showMessage(`❌ เกิดข้อผิดพลาด: ${errorMsg}`, 'error');
           } finally {
             toggleLoading(false);
           }
         });
         
       } catch (error) {
-        console.error('LIFF initialization error:', error);
-        showMessage('❌ เกิดข้อผิดพลาดในการเชื่อมต่อกับ LINE', 'error');
+        addDebugInfo(`LIFF initialization error: ${error}`);
+        document.body.innerHTML = `
+          <h2>เกิดข้อผิดพลาด</h2>
+          <div style="background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin: 20px;">
+            <p>ไม่สามารถเชื่อมต่อกับ LINE ได้</p>
+            <p><strong>รายละเอียดข้อผิดพลาด:</strong> ${error.message || error}</p>
+          </div>
+          <button onclick="location.reload()" style="padding: 10px 20px; background-color: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 10px auto; display: block;">ลองใหม่</button>
+        `;
       }
     }
     
