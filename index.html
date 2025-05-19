@@ -2,68 +2,209 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ลงทะเบียนนักเรียน</title>
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    h2 {
+      color: #4285f4;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    #registerForm {
+      max-width: 400px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+    
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    
+    button:hover {
+      background-color: #3367d6;
+    }
+    
+    #message {
+      text-align: center;
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    
+    .loading {
+      text-align: center;
+      margin-top: 20px;
+      display: none;
+    }
+  </style>
 </head>
 <body>
   <h2>ลงทะเบียนนักเรียน</h2>
   <form id="registerForm">
-    <input type="text" id="fullName" placeholder="ชื่อ-นามสกุล" required /><br><br>
-    <input type="email" id="email" placeholder="Email" required /><br><br>
-    <input type="password" id="password" placeholder="Password" required /><br><br>
-    <button type="submit">ลงทะเบียน</button>
+    <input type="text" id="fullName" placeholder="ชื่อ-นามสกุล" required /><br>
+    <input type="email" id="email" placeholder="Email" required /><br>
+    <input type="password" id="password" placeholder="Password" required /><br>
+    <button type="submit" id="submitBtn">ลงทะเบียน</button>
   </form>
-
+  <div id="loading" class="loading">กำลังประมวลผล...</div>
   <p id="message"></p>
-
+  
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxMd1dHU9vX29iuHUrBmh1wf4FJuTzK8UqSfp3OMVMJyXR8Q0kdXVDCWjoQbv56wZqNwA/exec';
+    // URL ของ Google Apps Script Web App
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK0NwN-igqCQjpEExeVZ2VM3AZGciIlv7ijfwIXPKBb-HkX_ZgVTP_bmIIb2_4wQBNqQ/exec';
+    // LIFF ID จาก LINE Developer Console
     const LIFF_ID = '2007433492-y8YG0Qqq';
-
-    async function main() {
-      await liff.init({ liffId: LIFF_ID });
-      if (!liff.isLoggedIn()) {
-        liff.login();
-        return;
-      }
-
-      const profile = await liff.getProfile();
-      const userId = profile.userId;
-
-      const checkRes = await fetch(`${SCRIPT_URL}?action=check&userId=${userId}`);
-      const checkData = await checkRes.json();
-
-      if (checkData.registered) {
-        document.getElementById('message').innerText = '✅ คุณเคยลงทะเบียนแล้ว';
-        return;
-      }
-
-      document.getElementById('registerForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fullName = document.getElementById('fullName').value;
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
-
-        const res = await fetch(SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({ userId, fullName, email, password }),
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await res.json();
-
-        if (result.status === 'duplicate') {
-          document.getElementById('message').innerText = '⚠️ คุณเคยลงทะเบียนแล้ว';
-        } else if (result.status === 'success') {
-          document.getElementById('message').innerText = `✅ ลงทะเบียนสำเร็จ! รหัสนักเรียนของคุณคือ ${result.studId}`;
-          setTimeout(() => liff.closeWindow(), 3000);
-        } else {
-          document.getElementById('message').innerText = '❌ เกิดข้อผิดพลาด';
-        }
-      });
+    
+    // แสดงข้อความ
+    function showMessage(message, type) {
+      const messageElement = document.getElementById('message');
+      messageElement.innerText = message;
+      messageElement.className = type;
     }
-
-    main();
+    
+    // แสดง/ซ่อนการโหลด
+    function toggleLoading(show) {
+      document.getElementById('loading').style.display = show ? 'block' : 'none';
+      document.getElementById('submitBtn').disabled = show;
+    }
+    
+    // ฟังก์ชันหลัก
+    async function main() {
+      try {
+        // เริ่มต้น LIFF
+        await liff.init({ liffId: LIFF_ID });
+        
+        // ตรวจสอบการล็อกอิน
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        
+        // ดึงข้อมูลโปรไฟล์
+        const profile = await liff.getProfile();
+        const userId = profile.userId;
+        
+        // ตรวจสอบการลงทะเบียน
+        try {
+          toggleLoading(true);
+          const checkRes = await fetch(`${SCRIPT_URL}?action=check&userId=${userId}`);
+          const checkData = await checkRes.json();
+          
+          if (checkData.registered) {
+            showMessage('✅ คุณเคยลงทะเบียนแล้ว', 'warning');
+            toggleLoading(false);
+            return;
+          }
+          toggleLoading(false);
+        } catch (error) {
+          console.error('Error checking registration:', error);
+          showMessage('❌ ไม่สามารถตรวจสอบข้อมูลได้ กรุณาลองใหม่อีกครั้ง', 'error');
+          toggleLoading(false);
+          return;
+        }
+        
+        // จัดการการส่งฟอร์ม
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          toggleLoading(true);
+          
+          try {
+            const fullName = document.getElementById('fullName').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            
+            // ตรวจสอบข้อมูลเบื้องต้น
+            if (!fullName || !email || !password) {
+              showMessage('⚠️ กรุณากรอกข้อมูลให้ครบถ้วน', 'warning');
+              toggleLoading(false);
+              return;
+            }
+            
+            // ส่งข้อมูลไปยัง Google Apps Script
+            const res = await fetch(SCRIPT_URL, {
+              method: 'POST',
+              body: JSON.stringify({ userId, fullName, email, password }),
+              headers: { 'Content-Type': 'application/json' }
+            });
+            
+            // ตรวจสอบการตอบกลับ
+            if (!res.ok) {
+              throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const result = await res.json();
+            console.log('Registration result:', result); // Debug log
+            
+            if (result.status === 'duplicate') {
+              showMessage('⚠️ คุณเคยลงทะเบียนแล้ว', 'warning');
+            } else if (result.status === 'success') {
+              showMessage(`✅ ลงทะเบียนสำเร็จ! รหัสนักเรียนของคุณคือ ${result.studId}`, 'success');
+              setTimeout(() => liff.closeWindow(), 3000);
+            } else {
+              showMessage('❌ เกิดข้อผิดพลาดในการลงทะเบียน', 'error');
+            }
+          } catch (error) {
+            console.error('Registration error:', error);
+            showMessage('❌ เกิดข้อผิดพลาดในการส่งข้อมูล กรุณาลองใหม่อีกครั้ง', 'error');
+          } finally {
+            toggleLoading(false);
+          }
+        });
+        
+      } catch (error) {
+        console.error('LIFF initialization error:', error);
+        showMessage('❌ เกิดข้อผิดพลาดในการเชื่อมต่อกับ LINE', 'error');
+      }
+    }
+    
+    // เรียกใช้ฟังก์ชันหลัก
+    window.onload = main;
   </script>
 </body>
 </html>
